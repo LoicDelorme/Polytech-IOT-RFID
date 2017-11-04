@@ -58,7 +58,7 @@ public class UserController extends AbstractController {
         user.setLastname(userForm.getLastname());
         user.setFirstname(userForm.getFirstname());
         user.setRfidTag(userForm.getRfidTag());
-        user.setIsValid(userForm.isValid());
+        user.setIsValid(userForm.getIsValid());
 
         this.userDaoServices.insert(user);
         return SERIALIZER.to(new SuccessResponse(user));
@@ -72,7 +72,7 @@ public class UserController extends AbstractController {
         user.setLastname(userForm.getLastname());
         user.setFirstname(userForm.getFirstname());
         user.setRfidTag(userForm.getRfidTag());
-        user.setIsValid(userForm.isValid());
+        user.setIsValid(userForm.getIsValid());
 
         this.userDaoServices.update(user);
         return SERIALIZER.to(new SuccessResponse(user));

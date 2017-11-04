@@ -1,5 +1,5 @@
 USE TP_RFID;
 
-INSERT INTO users (lastname, firstname, rfid_tag) VALUES ('DELORME', 'Loïc', NULL, 1), ('KASPRZYK', 'Nicolas', NULL, 1);
+INSERT INTO users (lastname, firstname, rfid_tag, is_valid) VALUES ('DELORME', 'Loïc', '1234-5678-9', true), ('KASPRZYK', 'Nicolas', NULL, false);
 
 INSERT INTO doors (label) VALUES ('Polytech');

@@ -44,11 +44,11 @@ public class UserForm {
         this.rfidTag = rfidTag;
     }
 
-    public boolean isValid() {
+    public boolean getIsValid() {
         return isValid;
     }
 
-    public void setValid(final boolean valid) {
-        isValid = valid;
+    public void setIsValid(final boolean isValid) {
+        this.isValid = isValid;
     }
 }
