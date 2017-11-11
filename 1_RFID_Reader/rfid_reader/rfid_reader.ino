@@ -6,36 +6,47 @@
 #include <RestClient.h>
 #include <ArduinoJson.h>
 
-// Constants
-#define SELECT_RC522_PIN  15 // For the chip RC522 (select)
-#define RESET_RC522_PIN 16 // For the chip RC522 (reset)
+// Constants (chip RC522)
+#define SELECT_RC522_PIN  15
+#define RESET_RC522_PIN 16
 
-#define DOOR_PIN 5 // For the door (= relay)
-#define DOOR_OPEN LOW // The door is opened
-#define DOOR_CLOSED HIGH // The door is closed
-#define DOOR_STATUS_OFFSET 0 // For the door
+// Constants (DOOR)
+#define DOOR_PIN 5
+#define DOOR_OPEN LOW
+#define DOOR_CLOSED HIGH
+#define DOOR_STATUS_OFFSET 0
 
+// Constants (LED)
+#define LED_PIN 2
+#define LED_TURNED_ON LOW
+#define LED_TURNED_OFF HIGH
+
+// Constants (COMMUNICATION)
 #define DEFAULT_SERIAL_SPEED 115200
 #define DEFAULT_EEPROM_BLOCK_SIZE 512
 #define DEFAULT_JSON_BUFFER 512
 
-#define DEFAULT_LOCAL_NETWORK_SSID ((const char *) "ssid")
-#define DEFAULT_LOCAL_NETWORK_PASSWORD ((const char *) "pwd")
-#define DEFAULT_BASE_URL ((const char *) "http://localhost:8090")
-#define DEFAULT_API_URL ((const char *) "/api/authorization/isGranted/1/")
+// Constants (NETWORK)
+#define DEFAULT_LOCAL_NETWORK_SSID ((const char *) "linksys_1")
+#define DEFAULT_LOCAL_NETWORK_PASSWORD ((const char *) "")
+
+// Constants (WEB-SERVICE)
+#define DEFAULT_API_BASE_URL ((const char *) "192.168.20.108")
+#define DEFAULT_API_SPECIFIC_URL ((const char *) "/api/authorization/isGranted/1/")
+#define DEFAULT_API_BASE_PORT 8090
 
 // Instances
 MFRC522 mfrc522 = MFRC522(SELECT_RC522_PIN, RESET_RC522_PIN);
-RestClient restClient = RestClient(DEFAULT_BASE_URL, DEFAULT_LOCAL_NETWORK_SSID, DEFAULT_LOCAL_NETWORK_PASSWORD);
+RestClient restClient = RestClient(DEFAULT_API_BASE_URL, DEFAULT_API_BASE_PORT);
 
 // Variables
 bool doorStatus = DOOR_CLOSED;
+String lastReadCard = "";
 
-// Methods
 bool waitingForNewCard() {
   Serial.println("Waiting for new card...");
   while (!mfrc522.PICC_IsNewCardPresent()) {
-    delay(100);
+    delay(50);
   }
 
   return true;
@@ -48,54 +59,65 @@ bool waitingForCardInformation() {
 
 void dumpByteArray(byte *buffer, byte bufferSize) {
   for (byte offset = 0; offset < bufferSize; offset++) {
-    Serial.print(buffer[offset] < 0x10 ? " 0" : " ");
     Serial.print(buffer[offset], DEC);
   }
 }
 
-String sendCardUuidToWebservice(byte *cardUuidArray) {
-  String cardUuid = String((char*) cardUuidArray);
-  String apiUrl = String(DEFAULT_API_URL + cardUuid);
-  
-  char apiUrlChar[sizeof(apiUrl)];
-  apiUrl.toCharArray(apiUrlChar, sizeof(apiUrlChar));
-  
-  Serial.println("Starting REST Client");
-  if (restClient.connect() == WL_CONNECTED) {
-    String webserviceResponse = "";
-    int webserviceResponseStatus = restClient.get(apiUrlChar, &webserviceResponse);
-    
-    Serial.print("Status code from webservice: ");
-    Serial.println(webserviceResponseStatus);
-    Serial.print("Response body from webservice: ");
-    Serial.println(webserviceResponse);
-
-    return webserviceResponse;
+String getCardUuid(byte *cardUuidArray, byte bufferSize) {
+  String cardUuid = "";
+  for (byte offset = 0; offset < bufferSize; offset++) {
+    cardUuid = String(cardUuid + String(cardUuidArray[offset], DEC));
   }
 
-  return "";
+  return cardUuid;
 }
 
-JsonObject& parseWebserviceResponse(String response) {
-  StaticJsonBuffer<DEFAULT_JSON_BUFFER> jsonBuffer;
-  JsonObject& root = jsonBuffer.parseObject(response);
+String sendCardUuidToWebService(String cardUuid) {
+  String computedSpecificApiUrl = String(DEFAULT_API_SPECIFIC_URL + cardUuid);
   
-  root.printTo(Serial);
-  return root;
+  char specificApiUrl[sizeof(computedSpecificApiUrl) * 4];
+  computedSpecificApiUrl.toCharArray(specificApiUrl, sizeof(specificApiUrl));
+  
+  if (WiFi.status() != WL_CONNECTED) {
+    restClient.begin(DEFAULT_LOCAL_NETWORK_SSID, DEFAULT_LOCAL_NETWORK_PASSWORD);
+  }
+
+  Serial.print("Sending a REST request to the following URL: ");
+  Serial.println(specificApiUrl);
+  
+  String webServiceResponse = "";
+  int webServiceResponseStatus = restClient.get(specificApiUrl, &webServiceResponse);
+  
+  Serial.print("Status code from web-service: ");
+  Serial.println(webServiceResponseStatus);
+  Serial.print("Response body from web-service: ");
+  Serial.println(webServiceResponse);
+
+  return webServiceResponse;
+}
+
+JsonObject& parseWebServiceResponse(String response) {
+  StaticJsonBuffer<DEFAULT_JSON_BUFFER> jsonBuffer;
+  JsonObject& parsedResponse = jsonBuffer.parseObject(response);
+  
+  return parsedResponse;
 }
 
 void openDoor() {
   doorStatus = DOOR_OPEN;
-  Serial.println("Door will be opened!");
+  Serial.println("Door open!");
   digitalWrite(DOOR_PIN, doorStatus);
   EEPROM.write(DOOR_STATUS_OFFSET, doorStatus);
   EEPROM.commit();
 
-  // BIP
-  delay(5000);
+  digitalWrite(LED_PIN, LED_TURNED_OFF);
+  delay(1000);
+  digitalWrite(LED_PIN, LED_TURNED_ON);
+
+  delay(2000);
 
   doorStatus = DOOR_CLOSED;
-  Serial.println("Door will be closed!");
+  Serial.println("Door closed!");
   digitalWrite(DOOR_PIN, doorStatus);
   EEPROM.write(DOOR_STATUS_OFFSET, doorStatus);
   EEPROM.commit();
@@ -103,8 +125,8 @@ void openDoor() {
 
 void setup() {
   // SERIAL
-  Serial.print("Serial initialization... ");
   Serial.begin(DEFAULT_SERIAL_SPEED);
+  Serial.print("Serial initialization... ");
   Serial.println("\tPASS");
 
   // EEPROM
@@ -117,26 +139,24 @@ void setup() {
   SPI.begin();
   Serial.println("\tPASS");
 
-  // WIFI
-  Serial.print("Wifi initialization... ");
-  WiFi.begin(DEFAULT_LOCAL_NETWORK_SSID, DEFAULT_LOCAL_NETWORK_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(250);
-    Serial.print(".");
-  }
-  Serial.print("Successfully connected, IP address: ");
-  Serial.println(WiFi.localIP());
+  // REST
+  restClient.begin(DEFAULT_LOCAL_NETWORK_SSID, DEFAULT_LOCAL_NETWORK_PASSWORD);
   
   // RC522
   Serial.print("RC522 chip initialization... ");
   mfrc522.PCD_Init();
   Serial.println("\tPASS");
-  
+
   // DOOR
   Serial.print("Door initialization... ");
   pinMode(DOOR_PIN, OUTPUT);
   doorStatus = EEPROM.read(DOOR_STATUS_OFFSET);
   digitalWrite(DOOR_PIN, doorStatus);
+  Serial.println("\tPASS");
+
+  // LED
+  Serial.print("Led initialization... ");
+  pinMode(LED_PIN, OUTPUT);
   Serial.println("\tPASS");
 }
 
@@ -157,26 +177,38 @@ void loop() {
   }
   Serial.println("Card information read!");
 
-  // CARD UUID
+  // GET CARD UUID
+  String cardUuid = getCardUuid(mfrc522.uid.uidByte, mfrc522.uid.size);
   Serial.print("Card UUID = ");
-  dumpByteArray(mfrc522.uid.uidByte, mfrc522.uid.size);
-  Serial.println();
+  Serial.println(cardUuid);
 
-  // WEB SERVICE CONNECTION
-  String webserviceResponse = sendCardUuidToWebservice(mfrc522.uid.uidByte);
+  // WEB SERVICE REQUEST
+  String webServiceResponse = sendCardUuidToWebService(cardUuid);
+
+  // WEB SERVICE RESPONSE PARSING
+  JsonObject& parsedWebServiceResponse = parseWebServiceResponse(webServiceResponse);
 
   // CARD UUID AUTHORIZATION CHECKING
-  JsonObject& parsedWebserviceResponse = parseWebserviceResponse(webserviceResponse);
-
-  // PROCESS RESPONSE
-  if (parsedWebserviceResponse["success"]) {
+  if (parsedWebServiceResponse["success"]) {
     openDoor();
   } else {
-    // BIP BIP BIP
+    digitalWrite(LED_PIN, LED_TURNED_OFF);
+    delay(1000);
+    digitalWrite(LED_PIN, LED_TURNED_ON);
+
+    digitalWrite(LED_PIN, LED_TURNED_OFF);
+    delay(1000);
+    digitalWrite(LED_PIN, LED_TURNED_ON);
+
+    digitalWrite(LED_PIN, LED_TURNED_OFF);
+    delay(1000);
+    digitalWrite(LED_PIN, LED_TURNED_ON);
   }
 
   // DO NOT LOOP UNTIL USER REMOVED ITS CARD
-  while (mfrc522.PICC_IsNewCardPresent()) {
-    delay(100);
+  mfrc522.PICC_ReadCardSerial();
+  while (cardUuid.equals(getCardUuid(mfrc522.uid.uidByte, mfrc522.uid.size))) {
+    delay(50);
+    mfrc522.PICC_ReadCardSerial();
   }
 }
