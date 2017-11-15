@@ -16,11 +16,6 @@
 #define DOOR_CLOSED HIGH
 #define DOOR_STATUS_OFFSET 0
 
-// Constants (LED)
-#define LED_PIN 2
-#define LED_TURNED_ON LOW
-#define LED_TURNED_OFF HIGH
-
 // Constants (COMMUNICATION)
 #define DEFAULT_SERIAL_SPEED 115200
 #define DEFAULT_EEPROM_BLOCK_SIZE 512
@@ -31,7 +26,7 @@
 #define DEFAULT_LOCAL_NETWORK_PASSWORD ((const char *) "")
 
 // Constants (WEB-SERVICE)
-#define DEFAULT_API_BASE_URL ((const char *) "192.168.20.108")
+#define DEFAULT_API_BASE_URL ((const char *) "192.168.20.116")
 #define DEFAULT_API_SPECIFIC_URL ((const char *) "/api/authorization/isGranted/1/")
 #define DEFAULT_API_BASE_PORT 8090
 
@@ -110,11 +105,8 @@ void openDoor() {
   EEPROM.write(DOOR_STATUS_OFFSET, doorStatus);
   EEPROM.commit();
 
-  digitalWrite(LED_PIN, LED_TURNED_OFF);
-  delay(1000);
-  digitalWrite(LED_PIN, LED_TURNED_ON);
-
-  delay(2000);
+  Serial.println("BIP");
+  delay(3000);
 
   doorStatus = DOOR_CLOSED;
   Serial.println("Door closed!");
@@ -153,11 +145,6 @@ void setup() {
   doorStatus = EEPROM.read(DOOR_STATUS_OFFSET);
   digitalWrite(DOOR_PIN, doorStatus);
   Serial.println("\tPASS");
-
-  // LED
-  Serial.print("Led initialization... ");
-  pinMode(LED_PIN, OUTPUT);
-  Serial.println("\tPASS");
 }
 
 void loop() {
@@ -192,23 +179,7 @@ void loop() {
   if (parsedWebServiceResponse["success"]) {
     openDoor();
   } else {
-    digitalWrite(LED_PIN, LED_TURNED_OFF);
-    delay(1000);
-    digitalWrite(LED_PIN, LED_TURNED_ON);
-
-    digitalWrite(LED_PIN, LED_TURNED_OFF);
-    delay(1000);
-    digitalWrite(LED_PIN, LED_TURNED_ON);
-
-    digitalWrite(LED_PIN, LED_TURNED_OFF);
-    delay(1000);
-    digitalWrite(LED_PIN, LED_TURNED_ON);
-  }
-
-  // DO NOT LOOP UNTIL USER REMOVED ITS CARD
-  mfrc522.PICC_ReadCardSerial();
-  while (cardUuid.equals(getCardUuid(mfrc522.uid.uidByte, mfrc522.uid.size))) {
-    delay(50);
-    mfrc522.PICC_ReadCardSerial();
+    Serial.println("BIP BIP BIP");
+    delay(3000);
   }
 }
